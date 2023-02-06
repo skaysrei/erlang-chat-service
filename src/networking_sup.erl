@@ -1,21 +1,24 @@
-% this supervisor starts the TCP socket and a pool of 10 TCP listeners,
-% each listener (worker) will generate a new one to replace itself as soon 
-% as it receives a connection request, when done the worker will die.
+%%%-------------------------------------------------------------------
+%% @doc
+%% this supervisor starts the TCP socket and a pool of 10 TCP listeners,
+%% each listener (worker) will generate a new one to replace itself as soon 
+%% as it receives a connection request, when done the worker will die.
+%% @end
+%%%-------------------------------------------------------------------
 
 -module(networking_sup).
 -behaviour(supervisor).
 
--export([start_link/1, start_socket/0]).
+-export([start_link/1, start_server_worker/0]).
 -export([init/1]).
 
 start_link(Port) ->
-    io:format("Networking supervisor started!~n"),
+    io:format("Starting networking supervisor...~n"),
 	supervisor:start_link({local, ?MODULE}, ?MODULE, [Port]).
 
-init(Port) ->
-    io:format("OPENING TCP SOCKET ON PORT: ~p~n~n~n~n", Port),
-    % fix the goddam list unpacking in the args!! wtf is this trash
-	{ok, Socket} = gen_tcp:listen(1337, [{active, once}]),
+init([Port]) ->
+    io:format("Opening TCP socket on port ~p~n~n", [Port]),
+	{ok, Socket} = gen_tcp:listen(Port, [{active, once}]),
 	%% fire up another process to spawn the starting pool of listeners,
 	%% doing so separately as this is a blocking process(?).
 	spawn_link(fun empty_listeners/0),
@@ -42,9 +45,9 @@ init(Port) ->
 
 %% internal functions
 
-start_socket() ->
+start_server_worker() ->
 	{ok, Pid} = supervisor:start_child(?MODULE, []),
-    io:format("Spawning listener worker (PID: ~p)", [Pid]),
+    io:format("~nSpawning server worker (PID: ~p)", [Pid]),
     {ok, Pid}.
 
 %% creates 10 listeners so that many multiple connections can
@@ -52,6 +55,5 @@ start_socket() ->
 %% a process would keep the count active at all times to insure nothing
 %% bad happens over time when processes get killed too much.
 empty_listeners() ->
-	[start_socket() || _ <- lists:seq(1,10)],
-    io:format("TCP listener started!~n~n~n~n"),
+	[start_server_worker() || _ <- lists:seq(1,10)],
 	ok.

@@ -1,7 +1,8 @@
 %%%-------------------------------------------------------------------
-%% @doc chat_service top level supervisor.
-%%      This supervisor manages the networking supervisor and the
-%%      interal messaging server, comprising the different groups.
+%% @doc 
+%% chat_service top level supervisor.
+%% this supervisor manages the networking supervisor and the
+%% interal messaging server, comprising the different groups.
 %% @end
 %%%-------------------------------------------------------------------
 
@@ -14,7 +15,7 @@
 -define(SERVER, ?MODULE).
 
 start_link() ->
-    io:format("Root supervisor started!~n~n"),
+    io:format("Starting root supervisor...~n~n"),
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
 init([]) ->
@@ -38,6 +39,19 @@ init([]) ->
             type => supervisor, % worker | supervisor
             % LOOK INTO WHAT THE HELL THIS DOES
             modules => [networking_sup]
+        },
+        #{
+            % internal identifier used by supervisor
+            id => chat_controller,
+            % function to start up the worker process { module, fun, args }
+            % starts tcp server and passes the port
+            start => {chat_controller, start_link, []},
+            restart => permanent, % permanent | transient | temporary
+            % time in milliseconds with no response before worker gets shutdown
+            shutdown => 2000,
+            type => worker, % worker | supervisor
+            % LOOK INTO WHAT THE HELL THIS DOES
+            modules => [chat_controller]
         }
     ],
     

@@ -11,7 +11,6 @@
 
 % Starts the root supervisor
 start(_StartType, _StartArgs) ->
-    io:format("~n~nStarting root supervisor...~n"),
     chat_service_sup:start_link().
 
 stop(_State) ->

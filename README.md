@@ -26,11 +26,12 @@ Build
 
     $ rebar3 compile
 
+TLSv1.3
+
 # rebar3 version 3.20.0
 
 ### TODO: Implement Protobuf communication
 ### TODO: Implement RedisDB message storage
-<br></br>
 <br></br>
 ### References used during the development: 
 
@@ -48,7 +49,6 @@ Build
 
 [erl-chat-server: A simple chat server written in Erlang](https://github.com/luisgabriel/erl-chat-server)
 <br></br>
-<br></br>
 ### Useful general documentation: 
 
 [Erlang/OTP Development Environment for concurrent programming](https://www.erlang.org/doc/)
@@ -56,3 +56,7 @@ Build
 [Kerl, Easy building and installing of Erlang/OTP instances](https://github.com/kerl/kerl)
 
 [Rebar3, The official build tool for Erlang](https://rebar3.org/docs/)
+
+[Erlang/OTP: gen_server](https://www.erlang.org/doc/man/gen_server.html)
+
+[Erlang/OTP: gen_tcp](https://www.erlang.org/doc/man/gen_tcp.html)
