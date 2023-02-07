@@ -27,13 +27,15 @@ init(_Args) ->
 
 %% if no user is passed try logging in
 %% TODO: refactor case constructs w pattern matching functions (separate with ;)
+%% TODO: check against state if user is logged in
 handle_call({message, Msg}, _From, State) ->
+    %% replace with BIF (built in function) 'element(1, _From)'
     {Pid, ReplyTag} = _From,
     %% extracts the [command, message] from raw data
     Parsed = parse_message(Msg),
     case Parsed of
         {Command, Content} ->
-            command_select(Parsed, Pid),
+            command_select(Parsed, Pid, State#state.user),
             {reply, ok, State};
         protocol_error ->
             {reply, {error, "Err: Wrong protocol syntax OwO"}, State};
@@ -45,6 +47,9 @@ handle_call({message, Msg}, _From, State) ->
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
+%% sets the Username on succesful login
+handle_cast({login, Username}, State) ->
+    {noreply, State#state{user = Username}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -74,31 +79,24 @@ quit(Command, Msg) ->
     ok.
 
 %% TODO: change from pid to name, CHANGE TO gen_server:cast()
-command_select({"LOGIN", User}, ServerPid) ->
-    gen_server:call(chat_controller, {login, User, ServerPid}),
-    ok;
-command_select({"LOGOUT", _}, ServerPid) ->
-    io:format("\n\nLOGOUT SELECTOR REACHED\n\n", []), %% remove
-    gen_server:call(chat_controller, {logout, ServerPid}),
-    ok;
+%% LOGIN MANAGEMENT---------------------------------------------------
+command_select({"LOGIN", Data}, ServerPid, User) ->
+    gen_server:call(chat_controller, {login, Data, ServerPid});
+command_select({"LOGOUT", Data}, ServerPid, User) ->
+    gen_server:call(chat_controller, {logout, Data, ServerPid});
+%% ROOM MANAGEMENT----------------------------------------------------
+command_select({"NEWROOM", Data}, ServerPid, User) ->
+    gen_server:cast(chat_controller, {newroom, Data, ServerPid});
+command_select({"DELROOM", Data}, ServerPid, User) ->
+    gen_server:cast(chat_controller, {delroom, Data, ServerPid});
+command_select({"LISTROOM", Data}, ServerPid, User) ->
+    gen_server:cast(chat_controller, {listroom, Data, ServerPid});
+command_select({"JOINROOM", Data}, ServerPid, User) ->
+    gen_server:cast(chat_controller, {joinroom, Data, ServerPid});
+command_select({"EXITROOM", Data}, ServerPid, User) ->
+    gen_server:cast(chat_controller, {exitroom, Data, ServerPid}).
 
-command_select({"NEWROOM", User}, ServerPid) ->
-    gen_server:cast(chat_controller, {newroom, User, ServerPid}),
-    ok;
-command_select({"DELROOM", User}, ServerPid) ->
-    gen_server:cast(chat_controller, {delroom, User, ServerPid}),
-    ok;
-command_select({"LISTROOM", User}, ServerPid) ->
-    gen_server:cast(chat_controller, {listroom, User, ServerPid}),
-    ok;
-command_select({"JOINROOM", User}, ServerPid) ->
-    gen_server:cast(chat_controller, {joinroom, User, ServerPid}),
-    ok;
-command_select({"EXITROOM", User}, ServerPid) ->
-    gen_server:cast(chat_controller, {exitroom, User, ServerPid}),
-    ok;
-
-command_select({"SAY", User}, ServerPid) ->
+command_select({"SAY", Data}, ServerPid) ->
     ok.
 
 try_login(User) ->
