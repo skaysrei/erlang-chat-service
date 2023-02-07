@@ -38,6 +38,12 @@ TLSv1.3
 
 # rebar3 version 3.20.0
 
+### Known issues:
+1. If the service gets terminated while one or more clients are still connected
+it might take a few more seconds for the sockets to free up.
+2. translation_layer worker not closing when connection closes because it is not
+sending an exit signal. Sending it manually now but needs a rework
+
 ### TODO: Implement Protobuf communication
 ### TODO: Implement RedisDB message storage
 <br></br>
