@@ -7,7 +7,10 @@
 -record(state, {socket, trs_pid}).
 
 start_link(Socket) ->
-	gen_server:start_link(?MODULE, Socket, []).
+	{ok, Pid} = gen_server:start_link(?MODULE, Socket, []),
+	io:format("TEST PID1 ~p\n", [Pid]),
+	{ok, Pid}.
+
 
 init(Socket) ->
 	%% Start accepting requests
@@ -19,17 +22,22 @@ init(Socket) ->
 %% will handle async messages from gen_tcp
 handle_cast(accept, State = #state{socket=ListenSocket}) ->
 	{ok, AcceptSocket} = gen_tcp:accept(ListenSocket),
-
-	%% Boot a new listener to replace this one.
+	%% boot a new listener to replace this one.
 	networking_sup:start_server_worker(),
 	{ok, Pid} = translation_layer:start_link(),
 	send(AcceptSocket, "Server ready :3", []),
 	{noreply, State#state{socket=AcceptSocket, trs_pid=Pid}};
-
-handle_cast(_, State) ->
+handle_cast(login, State) ->
+	send(State#state.socket, "Logged in successfully OwO", []),
+	{noreply, State};
+handle_cast(logout, State) ->
+	send(State#state.socket, "Logged out successfully UwU", []),
+	{noreply, State};
+handle_cast({message, Message}, State) ->
+	send(State#state.socket, Message, []),
 	{noreply, State}.
 
-
+%% handles messages from the client
 handle_info({tcp, Socket, "quit"++_}, State) ->
 	gen_tcp:close(Socket),
 	{stop, normal, State};
@@ -45,12 +53,16 @@ handle_info(E, State) ->
 	io:fwrite("unexpected: ~p~n", [E]),
 	{noreply, State}.
 
-handle_call(_E, _From, State) -> {noreply, State}.
+handle_call({error, Msg}, _From, State) -> 
+	send(State#state.socket, Msg, []),
+	{noreply, State}.
+
 terminate(_Reason, _Tab) -> ok.
 code_change(_OldVersion, Tab, _Extra) -> {ok, Tab}.
 
 %% Send a message back to the client
 send(Socket, Str, Args) ->
+	%% TODO: Remove complexity
 	ok = gen_tcp:send(Socket, io_lib:format(Str++"~n", Args)),
 	ok = inet:setopts(Socket, [{active, once}]),
 	ok.

@@ -1,4 +1,12 @@
-# A concurrent Erlang chat service: 
+# A simple Erlang chat service: 
+
+This is a chat server built on top of the Erlang/OTP framework. It allows for multiple
+TCP connections to take place and communication happens via a very simple protocol. 
+
+### Features
+
+FEATURES HERE
+
 ### OTP Supervision tree: 
 
 <p align="center">
@@ -49,7 +57,7 @@ TLSv1.3
 
 [erl-chat-server: A simple chat server written in Erlang](https://github.com/luisgabriel/erl-chat-server)
 <br></br>
-### Useful general documentation: 
+### Useful related documentation: 
 
 [Erlang/OTP Development Environment for concurrent programming](https://www.erlang.org/doc/)
 

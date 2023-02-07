@@ -25,13 +25,34 @@ start_link() ->
 init(_Args) ->
     {ok, #state{}}.
 
+%% if no user is passed try logging in
+%% TODO: refactor case constructs w pattern matching functions (separate with ;)
 handle_call({message, Msg}, _From, State) ->
-    io:format("\n\nTranslation layer (Raw data):\n\nMessage[ ~s ]", [Msg]),
+    {Pid, ReplyTag} = _From,
     %% extracts the [command, message] from raw data
-    {Command, [_|Content]} = lists:splitwith(fun(T) -> [T] =/= ":" end, Msg),
-    io:format("\nTranslation layer (Parsed data):\n\nCommand[ ~s ]\nMessage[ ~s ]\n\n", [Command, Content]),
-    
-    {reply, ok, State};
+    Parsed = parse_message(Msg),
+    case Parsed of
+        {Command, Content} ->
+            io:format("\nTranslation layer (Parsed data):\n\nCommand[ ~s ]\nMessage[ ~s ]\n\n", [Command, Content]),
+            %%  gen_server:cast(chat_controller, PID tcp worker, command/msg)
+            command_select({Command, Content} = Parsed, Pid),
+            {reply, ok, State};
+        protocol_error ->
+            {reply, {error, "Err: Wrong protocol syntax OwO"}, State};
+        unknown_error ->
+            {reply, {error, "Err: Unknown error CwC"}, State};
+        _ ->
+            {reply, error, State}
+    end;
+
+
+
+    % case Command of
+    %     "LOGIN" ->
+    %         try_login(Content);
+    %     _ ->
+    %         {reply, {error, "Err: Unknown command UwU"}, State}
+    % end;
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
@@ -47,3 +68,34 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%% TODO Set return values into state inside handle_call
+parse_message(Msg) ->
+    case lists:member($:, Msg) of
+        false ->
+            protocol_error;
+        true -> 
+            {Command, [_|Content]} = lists:splitwith(fun(T) -> [T] =/= ":" end, Msg),
+            io:format("\n\nCONTENT: ~p", [Content]),
+            {Command, Content};
+        _ ->
+            unknown_error
+    end.
+
+quit(Command, Msg) ->
+    ok.
+
+%% TODO: change from pid to name
+command_select({"LOGIN", User}, ServerPid) ->
+    io:format("\n\nCOMMAND SELECTOR REACHED~n~n", []),
+    gen_server:call(chat_controller, {login, User, ServerPid}),
+    ok;
+command_select(Command, Msg) ->
+    ok;
+command_select(Command, Msg) ->
+    ok;
+command_select(Command, Msg) ->
+    ok.
+
+try_login(User) ->
+    gen_server:call({login, User}).
