@@ -29,7 +29,9 @@ handle_cast(accept, State = #state{socket=ListenSocket}) ->
 	{ok, AcceptSocket} = gen_tcp:accept(ListenSocket),
 	%% boot a new listener to replace this one.
 	networking_sup:start_server_worker(),
+	%% TODO: Change this start / link sequence, not ideal
 	{ok, Pid} = translation_layer:start_link(),
+	%% link(Pid),
 	send(AcceptSocket, "Server ready.", []),
 	{noreply, State#state{socket=AcceptSocket, trs_pid=Pid}};
 %% handles chat_controller output
@@ -45,6 +47,8 @@ handle_cast({message, Message}, State) ->
 
 %% handling of requests from gen_tcp---------------------------------
 handle_info({tcp, Socket, "!exit"++_}, State) ->
+	%% TODO: Change the translation_layer exit
+	exit(State#state.trs_pid, kill),
 	gen_tcp:close(Socket),
 	{stop, normal, State};
 handle_info({tcp, Socket, Msg}, State) ->
@@ -52,8 +56,8 @@ handle_info({tcp, Socket, Msg}, State) ->
 	gen_server:call(State#state.trs_pid, {message, Msg}),
 	{noreply, State};
 %% TODO add logout for conn lost or error
-handle_info({tcp_closed, _Socket}, State) -> {stop, normal, State};
-handle_info({tcp_error, _Socket, _}, State) -> {stop, normal, State};
+handle_info({tcp_closed, _Socket}, State) -> exit(State#state.trs_pid, kill), {stop, normal, State};
+handle_info({tcp_error, _Socket, _}, State) -> exit(State#state.trs_pid, kill), {stop, normal, State};
 handle_info(E, State) ->
 	io:fwrite("unexpected: ~p~n", [E]),
 	{noreply, State}.
@@ -64,6 +68,8 @@ handle_call({error, Msg}, _From, State) ->
 
 terminate(_Reason, _Tab) -> ok.
 code_change(_OldVersion, Tab, _Extra) -> {ok, Tab}.
+
+%% INTERNAL FUNCTIONS-------------------------------------------------
 
 %% send message back to the client
 send(Socket, Str, Args) ->
