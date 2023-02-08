@@ -5,7 +5,15 @@ TCP connections to take place and communication happens via a very simple protoc
 
 ### Features
 
-FEATURES HERE
+Login:
+-----
+
+    LOGIN:"UserName"
+
+Logout:
+-----
+
+    LOGOUT:"UserName"
 
 ### OTP Supervision tree: 
 
@@ -41,10 +49,14 @@ TLSv1.3
 ---
 
 ### Known issues:
-1. If the service gets terminated while one or more clients are still connected
-it might take a few more seconds for the sockets to free up.
+1. If the service gets terminated, especially while one or more clients are still 
+connected, it might take a few more seconds for the sockets to free up.
+(TEMP FIX: Wait ~1 minute before restarting the service).
 2. translation_layer worker not closing when connection closes because it is not
-sending an exit signal. Sending it manually now but needs a rework
+sending an exit signal. Sending it manually now but needs a rework. Also error
+when connecting multiple clients, service already started.
+(FIXED: Changed start_link/4 to start_link/3, issue was duplicate local name when
+the server tried to start a new translation_layer worker).
 
 ---
 
