@@ -19,10 +19,10 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% state#loggedUsers -> Key(Username) => Val(tcp_server PID)
-%% activeGroups# -> Key(GroupName) => Val([Owner, [ActiveMembers], [Visibility]])
+%% activeRooms# -> Key(GroupName) => Val({Owner, ActiveMembers, Visibility})
 -record(state, { %% this is only the record definition! needs to be created later
     loggedUsers,
-    activeGroups
+    activeRooms
 }).
 
 start_link() ->
@@ -35,7 +35,7 @@ init(_Args) ->
     io:format("Starting chat_controller...~n~n"),
     State = #state{
         loggedUsers = dict:new(),
-        activeGroups = dict:new()
+        activeRooms = dict:new()
     },
     {ok, State}.
 
@@ -44,25 +44,30 @@ init(_Args) ->
 handle_call(stop, _From, State) ->
     {stop, normal, stopped, State};
 
-handle_call({message, Msg}, _From, State) ->
-    io:format("\n\nCall receiver by chat_controller: MSG[ ~p ]~n~n", [Msg]),
-    {reply, {}, State};
+%% TODO: Change login calls to casts
+%% HANDLERS-----------------------------------------------------------------------------
 %% LOGIN %%
 handle_call({login, User, ServerPid}, _From, State) ->
-    io:format("\n\n[LOGIN] request received by chat_controller: USR[ ~p ] PID[ ~p ]~n~n", [User, ServerPid]),
-    %% checks if the user pid is stored in the state (user logged in)
-    NewState = user_action({login, ServerPid, element(1, _From), User}, State),
-    {reply, logged_in, NewState};
+    io:format("\n\n[LOGIN] request received by chat_controller: USR[ ~p ] ServerPID[ ~p ]", [User, ServerPid]),
+    {reply, logged_in, NewState = user_action({login, ServerPid, element(1, _From), User}, State)};
 %% LOGOUT %%
 handle_call({logout, User, ServerPid}, _From, State) ->
-    io:format("\n\n[LOGOUT] request received by chat_controller: PID[ ~p ]~n~n", [ServerPid]),
-    %% checks if the user pid is stored in the state (user logged in)
-    NewState = user_action({logout, ServerPid, User}, State),
-    {reply, logged_in, NewState};
+    io:format("\n\n[LOGOUT] request received by chat_controller: USR[ ~p ] ServerPID[ ~p ]", [User, ServerPid]),
+    {reply, logged_in, NewState = user_action({logout, ServerPid, User}, State)};
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
-
+%% LIST ROOMS
+handle_cast({listroom, ServerPid}, State) -> 
+    room_action({list, ServerPid}, State), {noreply, State};
+%% CREATE ROOM
+handle_cast({newroom, RoomName, ServerPid, User}, State) -> 
+    {noreply, NewState = room_action({new, RoomName, ServerPid, User, Public = true}, State)};
+%% DELETE ROOM
+handle_cast({delroom, RoomName, ServerPid, User}, State) -> 
+    {noreply, NewState = room_action({del, RoomName, ServerPid, User}, State)};
+%% JOIN ROOM
+%% EXIT ROOM
 handle_cast(_Msg, State) -> 
     {noreply, State}.
 
@@ -78,54 +83,81 @@ code_change(_OldVsn, State, _Extra) ->
 %% INTERNAL FUNCTIONS-------------------------------------------------------------------
 %% PATTERN MATCHING GALORE! -> Refactoring all those nasty 'case' constructs
 
-%% TODO: helper function to extract state REFACTORR
-update_user_state() ->
-    ok.
-
-%% these check/update the user state
-user_action({login, UserPid, TrsPid, User}, State) ->
+%% LOGIN FUNCTIONS----------------------------------------------------------------------
+user_action({login, ServerPid, TrsPid, User}, State) ->
     case dict:is_key(User, State#state.loggedUsers) of
         true ->
-            %% already logged in
-            gen_server:cast(UserPid, {message, "Already logged in as [" ++ User ++ "]."}),
+            gen_server:cast(ServerPid, {message, "Already logged in as [" ++ User ++ "]."}),
             State;
         false ->
             %% TODO: Add multiple login check;
             %% one tcp client can currently login multiple users per session
             gen_server:cast(TrsPid, {login, User}),
-            gen_server:cast(UserPid, login),
+            gen_server:cast(ServerPid, login),
             NewState = #state{
-                loggedUsers = dict:append(User, UserPid, State#state.loggedUsers),
-                activeGroups = State#state.activeGroups
+                loggedUsers = dict:append(User, ServerPid, State#state.loggedUsers),
+                activeRooms = State#state.activeRooms
             };
         _ ->
             State
     end;
-user_action({logout, UserPid, User}, State) ->
+user_action({logout, ServerPid, User}, State) ->
     case dict:is_key(User, State#state.loggedUsers) of
         true ->
-            gen_server:cast(UserPid, logout),
+            gen_server:cast(ServerPid, logout),
             NewState = #state{
-                loggedUsers = dict:erase(User, State#state.loggedUsers),
-                activeGroups = State#state.activeGroups
+        loggedUsers = dict:erase(User, State#state.loggedUsers),
+                activeRooms = State#state.activeRooms
             };
         false ->
             %% not logged in
-            gen_server:cast(UserPid, {message, "You are not logged in."}),
+            gen_server:cast(ServerPid, {message, "You are not logged in."}),
             State;
         _ ->
             State
     end.
-
-%% TODO: helper function to extract state REFACTORR
-update_room() ->
-    ok.
-
-% these check/update the room state
-room_action({add_room, Owner, Visibility}, State) ->
-    ok;
-room_action({rem_room, Owner, Visibility}, State) ->
-    ok;
+    
+%% ROOM FUNCTIONS-----------------------------------------------------------------------
+%% TODO: Improve the output
+room_action({list, ServerPid}, State) ->
+    RoomList = lists:flatten(io_lib:format("~p", [dict:to_list(State#state.activeRooms)])),
+    gen_server:cast(ServerPid, {message, "Active rooms:\n\n" ++ RoomList});
+room_action({new, RoomName, ServerPid, Owner, Visibility}, State) ->
+    case dict:is_key(RoomName, State#state.activeRooms) of
+        true ->
+            gen_server:cast(ServerPid, {message, "Room name [" ++ RoomName ++ "]is taken."}),
+            State;
+        false ->
+            gen_server:cast(ServerPid, {message, "New room [" ++ RoomName ++ "] added."}),
+            NewState = #state{
+                activeRooms = dict:append(RoomName, {Owner, [Owner], true}, State#state.activeRooms),
+                loggedUsers = State#state.loggedUsers
+            };
+        _ ->
+            State
+    end;
+room_action({del, RoomName, ServerPid, Owner}, State) ->
+    case dict:is_key(RoomName, State#state.activeRooms) of
+        false ->
+            gen_server:cast(ServerPid, {message, "Room named [" ++ RoomName ++ "] was not found."}),
+            State;
+        true ->
+            case element(1, lists:nth(1, dict:fetch(RoomName, State#state.activeRooms))) == Owner of
+                false ->
+                    gen_server:cast(ServerPid, {message, "You are not the owner of this room."}),
+                    State;
+                true ->
+                    gen_server:cast(ServerPid, {message, "Room [" ++ RoomName ++ "] was deleted."}),
+                    NewState = #state{
+                        activeRooms = dict:append(RoomName, {Owner, [Owner], true}, State#state.activeRooms),
+                        loggedUsers = State#state.loggedUsers
+                    };
+                _ ->
+                    State
+            end;
+        _ ->
+            State
+    end;
 room_action({join, User}, State) ->
     ok;
 room_action({exit, User}, State) ->

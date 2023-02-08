@@ -35,7 +35,7 @@ handle_call({message, Msg}, _From, State) ->
     Parsed = parse_message(Msg),
     case Parsed of
         {Command, Content} ->
-            command_select(Parsed, Pid, State#state.user),
+            select(Parsed, Pid, State#state.user),
             {reply, ok, State};
         protocol_error ->
             {reply, {error, "Err: Wrong protocol syntax OwO"}, State};
@@ -69,7 +69,7 @@ parse_message(Msg) ->
             protocol_error;
         true -> 
             {Command, [_|Content]} = lists:splitwith(fun(T) -> [T] =/= ":" end, Msg),
-            io:format("\n\nParsed command: C[~p] M[~p]\n\n", [Command, Content]),
+            io:format("\n\nParsed command: C[~p] M[~p]", [Command, Content]),
             {Command, Content};
         _ ->
             unknown_error
@@ -80,24 +80,19 @@ quit(Command, Msg) ->
 
 %% TODO: change from pid to name, CHANGE TO gen_server:cast()
 %% LOGIN MANAGEMENT---------------------------------------------------
-command_select({"LOGIN", Data}, ServerPid, User) ->
+select({"LOGIN", Data}, ServerPid, User) ->
     gen_server:call(chat_controller, {login, Data, ServerPid});
-command_select({"LOGOUT", Data}, ServerPid, User) ->
+select({"LOGOUT", Data}, ServerPid, User) ->
     gen_server:call(chat_controller, {logout, Data, ServerPid});
 %% ROOM MANAGEMENT----------------------------------------------------
-command_select({"NEWROOM", Data}, ServerPid, User) ->
-    gen_server:cast(chat_controller, {newroom, Data, ServerPid});
-command_select({"DELROOM", Data}, ServerPid, User) ->
-    gen_server:cast(chat_controller, {delroom, Data, ServerPid});
-command_select({"LISTROOM", Data}, ServerPid, User) ->
-    gen_server:cast(chat_controller, {listroom, Data, ServerPid});
-command_select({"JOINROOM", Data}, ServerPid, User) ->
-    gen_server:cast(chat_controller, {joinroom, Data, ServerPid});
-command_select({"EXITROOM", Data}, ServerPid, User) ->
-    gen_server:cast(chat_controller, {exitroom, Data, ServerPid}).
+select({"LISTROOM", _}, ServerPid, User) -> controller({listroom, ServerPid});
+select({"NEWROOM", Data}, ServerPid, User) -> controller({newroom, Data, ServerPid, User});
+select({"DELROOM", Data}, ServerPid, User) -> controller({delroom, Data, ServerPid, User});
+select({"JOINROOM", Data}, ServerPid, User) -> controller({joinroom, Data, ServerPid, User});
+select({"EXITROOM", Data}, ServerPid, User) -> controller({exitroom, Data, ServerPid, User}).
 
-command_select({"SAY", Data}, ServerPid) ->
+%% Private message
+select({"SAY", Data}, ServerPid) ->
     ok.
 
-try_login(User) ->
-    gen_server:call({login, User}).
+controller(Message) -> gen_server:cast(chat_controller, Message).
