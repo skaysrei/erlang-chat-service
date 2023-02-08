@@ -63,6 +63,9 @@ handle_cast({who, ServerPid, User}, State) ->
 %% WHERE AM I
 handle_cast({where, ServerPid, Room}, State) ->
     client_info(where, Room, ServerPid), {noreply, State};    
+%% BAD COMMAND!
+handle_cast({badcomm, Command, ServerPid}, State) ->
+    user_action({badcomm, Command, ServerPid}, State), {noreply, State};
 
 %% LIST ROOMS
 handle_cast({listroom, ServerPid}, State) -> 
@@ -77,9 +80,11 @@ handle_cast({newroom, RoomName, ServerPid, User}, State) ->
 handle_cast({delroom, RoomName, ServerPid, User}, State) -> 
     {noreply, NewState = room_action({del, RoomName, ServerPid, User}, State)};
 %% JOIN ROOM
-handle_cast({delroom, RoomName, ServerPid, User}, State) -> 
+handle_cast({joinroom, RoomName, ServerPid, User}, State) -> 
     {noreply, NewState = room_action({join, RoomName, ServerPid, User}, State)};
 %% EXIT ROOM
+handle_cast({exitroom, RoomName, ServerPid, User}, State) -> 
+    {noreply, NewState = room_action({exit, RoomName, ServerPid, User}, State)};
 handle_cast(_Msg, State) -> 
     {noreply, State}.
 
@@ -139,7 +144,8 @@ user_action({logout, ServerPid, User}, State) ->
             State;
         _ ->
             State
-    end.
+    end;
+user_action({badcomm, Command, ServerPid}, State) -> send(ServerPid, {"Command '" ++ Command ++ "' not recognized!"}).
 
 %% [META FUNCTIONS]
 client_info(who, User, ServerPid) -> 
@@ -177,7 +183,7 @@ room_action({new, RoomName, ServerPid, Owner, Visibility}, State) ->
                 false ->
                     gen_server:cast(ServerPid, {message, "New room [" ++ RoomName ++ "] added."}),
                     NewState = #state{
-                        activeRooms = dict:append(RoomName, {Owner, [], true}, State#state.activeRooms),
+                        activeRooms = dict:store(RoomName, {Owner, [], true}, State#state.activeRooms),
                         loggedUsers = State#state.loggedUsers
                     }
                 end;
@@ -190,13 +196,13 @@ room_action({del, RoomName, ServerPid, Owner}, State) ->
             gen_server:cast(ServerPid, {message, "Room named [" ++ RoomName ++ "] was not found."}),
             State;
         true ->
-            case element(1, lists:nth(1, dict:fetch(RoomName, State#state.activeRooms))) == Owner of
+            case element(1, dict:fetch(RoomName, State#state.activeRooms)) == Owner of
                 false ->
                     gen_server:cast(ServerPid, {message, "You are not the owner of this room."}),
                     State;
                 true ->
                     gen_server:cast(ServerPid, {message, "Room [" ++ RoomName ++ "] was deleted."}),
-                    gen_server:cast(ServerPid, {set_room, RoomName}), %% updating state on trs_layer
+                    gen_server:cast(ServerPid, {set_room, RoomName}), %% updating state on trs_layer %% ADD CHECK TOO SEE IF I AM INSIDE ROOM
                     NewState = #state{
                         activeRooms = dict:erase(RoomName, State#state.activeRooms),
                         loggedUsers = State#state.loggedUsers
@@ -214,7 +220,7 @@ room_action({join, RoomName, ServerPid, User}, State) ->
             gen_server:cast(ServerPid, {message, "Room named [" ++ RoomName ++ "] was not found."}),
             State;
         true ->
-            %% check if public
+            %% check if public IF INSIDE!!!!! too
             case element(3, dict:fetch(RoomName, State#state.activeRooms)) of
                 false ->
                     gen_server:cast(ServerPid, {message, "Room [" ++ RoomName ++ "] private!"}),
@@ -223,9 +229,20 @@ room_action({join, RoomName, ServerPid, User}, State) ->
                     %% sends room state update to the client's server worker
                     gen_server:cast(ServerPid, {set_room, RoomName}),
                     gen_server:cast(ServerPid, {message, "You joined [" ++ RoomName ++ "]!"}),
-                    UpdatedRooms = element(2, dict:fetch(RoomName, State#state.activeRooms)),
+
+                    Current = dict:fetch(RoomName, State#state.activeRooms),
+                    %% expected: [{"Owner", [], Public}]
+                    Partecipants = element(2, Current),
+                    % expected: []
+                    NewPart = lists:append(Partecipants, [User]),
+                    % expected: ["User"]
+                    ReplaceList = erlang:setelement(2, Current, NewPart),
+                    %% expected {"Owner", ["User"], Public}
+                    UpdatedDict = dict:update(RoomName, fun (_) -> ReplaceList end, State#state.activeRooms),
+                    %% expected ["RoomName", {"Owner", ["User"], Public}]
+
                     NewState = #state{
-                        activeRooms = dict:update(RoomName, fun (Old) -> erlang:insert_element(2, Old, lists:append(element(2, Old), [User])) end, State#state.activeRooms),
+                        activeRooms = UpdatedDict,
                         loggedUsers = State#state.loggedUsers
                     };
                 _ ->
@@ -234,8 +251,32 @@ room_action({join, RoomName, ServerPid, User}, State) ->
         _ ->
             State
         end;
-room_action({exit, User}, State) ->
-    ok;
+room_action({exit, RoomName, ServerPid, User}, State) ->
+    %% check if the room exists
+    case dict:is_key(RoomName, State#state.activeRooms) of
+        false ->
+            gen_server:cast(ServerPid, {message, "Room named [" ++ RoomName ++ "] was not found."}),
+            State;
+        true ->
+            %% check if user is inside
+            case lists:search(fun (Elem) -> Elem == User end, element(2, dict:fetch(RoomName, State#state.activeRooms))) of %% remove nth
+                false ->
+                    gen_server:cast(ServerPid, {message, "Your are not in this room."}),
+                    State;
+                {value, User} ->
+                    %% sends room state update to the client's server worker
+                    gen_server:cast(ServerPid, {set_room, RoomName}),
+                    gen_server:cast(ServerPid, {message, "You left [" ++ RoomName ++ "]!"}),
+                    NewState = #state{
+                        activeRooms = dict:update(RoomName, fun (OldValue) -> erlang:insert_element(2, OldValue, lists:delete(User, element(2, OldValue))) end, State#state.activeRooms),
+                        loggedUsers = State#state.loggedUsers
+                    };
+                _ ->
+                    State
+            end;
+        _ ->
+            State
+        end;
 room_action({invite_private, User}, State) ->
     ok.
 

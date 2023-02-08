@@ -33,7 +33,7 @@ handle_call({message, Msg}, _From, State) ->
     %% replace with BIF (built in function) 'element(1, _From)'
     {Pid, ReplyTag} = _From,
     %% extracts the [command, message] from raw data
-    Parsed = parse_message(Msg),
+    Parsed = parse_message(Msg, Pid),
     case Parsed of
         {Command, Content} ->
             select(Parsed, Pid, State),
@@ -66,10 +66,10 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %% TODO Set return values into state inside handle_call
-parse_message(Msg) ->
+parse_message(Msg, ServerPid) ->
     case lists:member($:, Msg) of
         false ->
-            protocol_error;
+            controller({badcomm, Msg, ServerPid});
         true -> 
             {Command, [_|Content]} = lists:splitwith(fun(T) -> [T] =/= ":" end, Msg),
             io:format("\n\nParsed command: C[~p] M[~p]", [Command, Content]),
@@ -97,12 +97,13 @@ select({"DELROOM", Data}, ServerPid, State) -> controller({delroom, Data, Server
 %% TODO: change user and room state update to be handled by tcp_server
 select({"JOINROOM", Data}, ServerPid, State) -> controller({joinroom, Data, ServerPid, State#state.user});
 select({"EXITROOM", Data}, ServerPid, State) -> controller({exitroom, Data, ServerPid, State#state.user});
-select({"SETPRIVATE", Data}, ServerPid, State) -> controller({joinroom, Data, ServerPid, State#state.user});
-select({"SETPUBLIC", Data}, ServerPid, State) -> controller({joinroom, Data, ServerPid, State#state.user}).
+select({"SETPRIVATE", Data}, ServerPid, State) -> controller({setprivate, Data, ServerPid, State#state.user});
+select({"SETPUBLIC", Data}, ServerPid, State) -> controller({setpublic, Data, ServerPid, State#state.user});
 %% SEND MESSAGE-------------------------------------------------------
-
-select({"SAY", Data}, ServerPid) ->
-    ok.
+select({"SAY", Data}, ServerPid, State) ->
+    ok;
+%% CATCH BAD COMMANDS
+select({Command, Data}, ServerPid, State) -> controller({badcomm, Command, ServerPid}).
 %%--------------------------------------------------------------------
 %% SELECTION CONTROLLER
 controller(Message) -> gen_server:cast(chat_controller, Message).
