@@ -5,10 +5,10 @@
 %% as it receives a connection request, when done the worker will die.
 %% @end
 %%%-------------------------------------------------------------------
-
 -module(networking_sup).
 -behaviour(supervisor).
 
+% API
 -export([start_link/1, start_server_worker/0]).
 -export([init/1]).
 
@@ -35,7 +35,7 @@ init([Port]) ->
             start => {tcp_server, start_link, [Socket]},
             restart => temporary, % permanent | transient | temporary
             shutdown => 2000, % shutdown time expressed in ms
-            type => worker, % worker | supervisor
+            type => worker,
             modules => [tcp_server]
         }
     ],
@@ -43,8 +43,7 @@ init([Port]) ->
     {ok, {SupFlags, ChildSpecs}}.
 
 
-%% internal functions
-
+%% INTERNAL FUNCTIONS-------------------------------------------------
 start_server_worker() ->
 	{ok, Pid} = supervisor:start_child(?MODULE, []),
     io:format("~nSpawning server worker (PID: ~p)", [Pid]),
