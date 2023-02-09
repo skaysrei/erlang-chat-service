@@ -85,6 +85,12 @@ handle_cast({joinroom, RoomName, ServerPid, User}, State) ->
 %% EXIT ROOM
 handle_cast({exitroom, RoomName, ServerPid, User}, State) -> 
     {noreply, NewState = room_action({exit, RoomName, ServerPid, User}, State)};
+%% SET PRIVATE
+handle_cast({set_private, RoomName, ServerPid, User}, State) -> 
+    {noreply, NewState = room_action({set_private, RoomName, ServerPid, User}, State)};
+%% SET PUBLIC
+handle_cast({set_public, RoomName, ServerPid, User}, State) -> 
+    {noreply, NewState = room_action({set_public, RoomName, ServerPid, User}, State)};
 %% BROADCAST
 handle_cast({broadcast, RoomName, Message, ServerPid, User}, State) -> 
     {noreply, NewState = routing_action({broadcast, RoomName, Message, ServerPid, User}, State)};
@@ -174,8 +180,23 @@ client_info(where, Room, ServerPid) ->
 %% ROOM FUNCTIONS-----------------------------------------------------------------------
 %% TODO: Improve the output
 room_action({list, ServerPid}, State) ->
-    RoomList = lists:flatten(io_lib:format("~p", [dict:to_list(State#state.activeRooms)])),
-    gen_server:cast(ServerPid, {message, "Active rooms:\n\n" ++ RoomList});
+    RoomList = dict:to_list(State#state.activeRooms),
+    io:format("ROOMLIST: ~p", [RoomList]),
+    Message = case erlang:length(RoomList) < 1 of
+        true ->
+            "There are no active rooms.";
+        false ->
+            OutputList = lists:map(fun (R) ->
+                    Visibility = case element(3, element(2, R)) of
+                        true -> "PUBLIC"; 
+                        false -> "PRIVATE"
+                    end,
+                    RoomName = element(1, R),
+                    NMemb = erlang:length(element(2, element(2, R))),
+            %% compose output message from extracted data
+            io_lib:format("\n\n[~p] ~p: ~p Current Members", [Visibility, RoomName, NMemb]) end, RoomList)
+    end,
+    gen_server:cast(ServerPid, {message, "Active rooms:" ++ Message});
 room_action({new, RoomName, ServerPid, Owner, Visibility}, State) ->
     case dict:is_key(RoomName, State#state.activeRooms) of
         true ->
@@ -196,13 +217,13 @@ room_action({new, RoomName, ServerPid, Owner, Visibility}, State) ->
         _ ->
             State
     end;
-room_action({del, RoomName, ServerPid, Owner}, State) ->
+room_action({del, RoomName, ServerPid, User}, State) ->
     case dict:is_key(RoomName, State#state.activeRooms) of
         false ->
             gen_server:cast(ServerPid, {message, "Room named [" ++ RoomName ++ "] was not found."}),
             State;
         true ->
-            case element(1, dict:fetch(RoomName, State#state.activeRooms)) == Owner of
+            case element(1, dict:fetch(RoomName, State#state.activeRooms)) == User of
                 false ->
                     gen_server:cast(ServerPid, {message, "You are not the owner of this room."}),
                     State;
@@ -226,12 +247,11 @@ room_action({join, RoomName, ServerPid, User}, State) ->
             gen_server:cast(ServerPid, {message, "Room named [" ++ RoomName ++ "] was not found."}),
             State;
         true ->
-            %% check if public IF INSIDE!!!!! too
-            case element(3, dict:fetch(RoomName, State#state.activeRooms)) of
-                false ->
-                    gen_server:cast(ServerPid, {message, "Room [" ++ RoomName ++ "] private!"}),
-                    State;
-                true ->
+            %% check if public / TODO: check if inside
+        IsOwner = (element(1, dict:fetch(RoomName, State#state.activeRooms)) == User),
+            case {IsOwner, element(3, dict:fetch(RoomName, State#state.activeRooms))} of
+                %% matches all public rooms and private/owner
+                Clause when Clause =:= {true, true}; Clause =:= {false, true}; Clause =:= {true, false} ->
                     %% sends room state update to the client's server worker
                     gen_server:cast(ServerPid, {set_room, RoomName}),
                     gen_server:cast(ServerPid, {message, "You joined [" ++ RoomName ++ "]!"}),
@@ -247,12 +267,15 @@ room_action({join, RoomName, ServerPid, User}, State) ->
                         activeRooms = UpdatedDict,
                         loggedUsers = State#state.loggedUsers
                     };
+                {false, false} ->
+                    gen_server:cast(ServerPid, {message, "Room [" ++ RoomName ++ "] private!"}),
+                    State;
                 _ ->
                     State
             end;
         _ ->
             State
-        end;
+    end;
 room_action({exit, RoomName, ServerPid, User}, State) ->
     %% check if the room exists
     case dict:is_key(RoomName, State#state.activeRooms) of
@@ -269,8 +292,16 @@ room_action({exit, RoomName, ServerPid, User}, State) ->
                     %% sends room state update to the client's server worker
                     gen_server:cast(ServerPid, {set_room, RoomName}),
                     gen_server:cast(ServerPid, {message, "You left [" ++ RoomName ++ "]!"}),
+
+                    %% atomized update operations
+                    Current = dict:fetch(RoomName, State#state.activeRooms),
+                    Partecipants = element(2, Current),
+                    NewPart = lists:delete(User, Partecipants),
+                    ReplaceList = erlang:setelement(2, Current, NewPart),
+                    UpdatedDict = dict:update(RoomName, fun (_) -> ReplaceList end, State#state.activeRooms),
+
                     NewState = #state{
-                        activeRooms = dict:update(RoomName, fun (OldValue) -> erlang:insert_element(2, OldValue, lists:delete(User, element(2, OldValue))) end, State#state.activeRooms),
+                        activeRooms = UpdatedDict,
                         loggedUsers = State#state.loggedUsers
                     };
                 _ ->
@@ -278,26 +309,84 @@ room_action({exit, RoomName, ServerPid, User}, State) ->
             end;
         _ ->
             State
-        end;
-room_action({invite_private, User}, State) ->
-    ok.
+    end;
+%% TODO: these two are basically the same function, should refactor
+%% LIKE HOLY SHIT SO MUCH DUPLICATE CODE, but i am too sleepy now
+%% make it work today -> refactor tomorrow :3
+room_action({set_private, RoomName, ServerPid, User}, State) ->
+    %% check if the room exists
+    case dict:is_key(RoomName, State#state.activeRooms) of
+        false ->
+            gen_server:cast(ServerPid, {message, "Room named [" ++ RoomName ++ "] was not found."}),
+            State;
+        true ->
+            %% check if user is the owner
+            case element(1, dict:fetch(RoomName, State#state.activeRooms)) == User of
+                true ->
+                    gen_server:cast(ServerPid, {message, "Room [" ++ RoomName ++ "] set to private."}),
+                    UpdatedRoom = erlang:insert_element(3, dict:fetch(RoomName, State#state.activeRooms), false),
+                    NewState = #state{
+                        activeRooms = dict:store(RoomName, UpdatedRoom, State#state.activeRooms),
+                        loggedUsers = State#state.loggedUsers
+                    };
+                false->
+                    gen_server:cast(ServerPid, {message, "Only the owner can edit the room visibility."}),
+                    State;
+                _ ->
+                    State
+            end
+    end;
+room_action({set_public, RoomName, ServerPid, User}, State) ->
+    %% check if the room exists
+    case dict:is_key(RoomName, State#state.activeRooms) of
+        false ->
+            gen_server:cast(ServerPid, {message, "Room named [" ++ RoomName ++ "] was not found."}),
+            State;
+        true ->
+            %% check if user is the owner
+            case element(1, dict:fetch(RoomName, State#state.activeRooms)) == User of
+                true ->
+                    gen_server:cast(ServerPid, {message, "Room [" ++ RoomName ++ "] set to public."}),
+                    UpdatedRoom = erlang:insert_element(3, dict:fetch(RoomName, State#state.activeRooms), true),
+                    NewState = #state{
+                        activeRooms = dict:store(RoomName, UpdatedRoom, State#state.activeRooms),
+                        loggedUsers = State#state.loggedUsers
+                    };
+                false->
+                    gen_server:cast(ServerPid, {message, "Only the owner can edit the room visibility."}),
+                    State;
+                _ ->
+                    State
+            end
+    end.
 
 %% MESSAGE ROUTING FUNCTIONS------------------------------------------------------------
 routing_action({broadcast, RoomName, Message, ServerPid, User}, State) ->
-    lists:foreach(
-        fun (RoomMember) ->
-            send(
-                dict:fetch(RoomMember, State#state.loggedUsers),
-                {Message, User, RoomName}
-            )
-        end, element(2, dict:fetch(RoomName, State#state.activeRooms))),
-        State;
+    case dict:is_key(RoomName, State#state.activeRooms) of
+        false ->
+            gen_server:cast(ServerPid, {message, "Room named [" ++ RoomName ++ "] was not found."}),
+            State;
+        true ->
+            lists:foreach(
+                fun (RoomMember) ->
+                    send(
+                        dict:fetch(RoomMember, State#state.loggedUsers),
+                        {Message, User, RoomName}
+                    )
+                end, element(2, dict:fetch(RoomName, State#state.activeRooms))),
+                State
+    end;
 routing_action({direct, Recipient, Message, ServerPid, User}, State) ->
-    send(
-        dict:fetch(Recipient, State#state.loggedUsers),
-        {Message, User}
-    ), State.
-
+    case dict:is_key(Recipient, State#state.loggedUsers) of
+        false ->
+            gen_server:cast(ServerPid, {message, "User " ++ Recipient ++ " does not exist."}),
+            State;
+        true ->
+            send(
+                dict:fetch(Recipient, State#state.loggedUsers),
+                {Message, User}
+            ), State
+    end.
 %% send messages to the client
 send(ServerPid, {Message}) ->
     gen_server:cast(ServerPid, {message, Message});

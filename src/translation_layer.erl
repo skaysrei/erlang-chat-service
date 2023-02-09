@@ -6,7 +6,6 @@
 %% @end
 %%%-------------------------------------------------------------------
 -module(translation_layer).
-
 -behaviour(gen_server).
 
 %% API
@@ -15,8 +14,9 @@
 
 %% record is a shitty compiler hack why am i using it instead of a map??
 -record(state, {
-    user,
-    room,
+    %% not ideal, duplicate thruth
+    user, %% to answer whoami
+    room, %% to answer whereami
     login_time = null}).
 
 
@@ -27,7 +27,7 @@ init(_Args) ->
     {ok, #state{ user="", room=""}}.
 
 %% if no user is passed try logging in
-%% TODO: refactor case constructs w pattern matching functions (separate with ;)
+%% TODO: refactor case constructs w pattern matching
 %% TODO: check against state if user is logged in
 handle_call({message, Msg}, _From, State) ->
     %% replace with BIF (built in function) 'element(1, _From)'
@@ -38,8 +38,6 @@ handle_call({message, Msg}, _From, State) ->
         {Command, Content} ->
             select(Parsed, Pid, State),
             {reply, ok, State};
-        unknown_error ->
-            {reply, {error, "Err: Unknown error CwC"}, State};
         _ ->
             {reply, error, State}
     end;
@@ -64,8 +62,8 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 
-%% TODO: change from pid to name, CHANGE TO gen_server:cast()
-%% TODO: Refactor to allow for dynamics args list if possible
+%% TODO: change login calls to gen_server:cast()
+%% TODO: refactor to allow for pattern matching dynamics args list if possible
 %% LOGIN MANAGEMENT---------------------------------------------------
 select({"LOGIN", Data}, ServerPid, State) ->
     gen_server:call(chat_controller, {login, Data, ServerPid});
@@ -73,15 +71,18 @@ select({"LOGOUT", Data}, ServerPid, State) ->
     gen_server:call(chat_controller, {logout, Data, ServerPid});
 select({"WHOAMI", Data}, ServerPid, State) -> controller({who, ServerPid, State#state.user}); %% which user i'm logged in as
 select({"WHEREAMI", Data}, ServerPid, State) -> controller({where, ServerPid, State#state.room}); %% what room i'm in
+
 %% ROOM MANAGEMENT----------------------------------------------------
 select({"LISTROOM", _}, ServerPid, State) -> controller({listroom, ServerPid});
 select({"LISTUSERS", _}, ServerPid, State) -> controller({listusers, ServerPid});  %% NOT IMPLEMENTED
 select({"NEWROOM", Data}, ServerPid, State) -> controller({newroom, Data, ServerPid, State#state.user});
 select({"DELROOM", Data}, ServerPid, State) -> controller({delroom, Data, ServerPid, State#state.user});
 select({"JOINROOM", Data}, ServerPid, State) -> controller({joinroom, Data, ServerPid, State#state.user});
+select({"INVITEROOM", Data}, ServerPid, State) -> controller({joinroom, Data, ServerPid, State#state.user}); %% NOT IMPLEMENTED
 select({"EXITROOM", Data}, ServerPid, State) -> controller({exitroom, Data, ServerPid, State#state.user});
-select({"SETPRIVATE", Data}, ServerPid, State) -> controller({setprivate, Data, ServerPid, State#state.user}); %% NOT IMPLEMENTED
-select({"SETPUBLIC", Data}, ServerPid, State) -> controller({setpublic, Data, ServerPid, State#state.user}); %% NOT IMPLEMENTED
+select({"SETPRIVATE", Data}, ServerPid, State) -> controller({set_private, Data, ServerPid, State#state.user});
+select({"SETPUBLIC", Data}, ServerPid, State) -> controller({set_public, Data, ServerPid, State#state.user});
+
 %% SEND MESSAGE-------------------------------------------------------
 %% TODO: Refactor case with pattern matching
 select({"ROOM", Data}, ServerPid, State) ->
@@ -105,12 +106,7 @@ select({"SAY", Data}, ServerPid, State) ->
 %% CATCH BAD COMMANDS
 select({Command, Data}, ServerPid, State) -> controller({badcomm, Command, ServerPid}).
 
-%% SELECTION CONTROLLER-----------------------------------------------
-controller(Message) -> gen_server:cast(chat_controller, Message).
-
-
 %% INTERNAL FUNCTIONS-------------------------------------------------
-
 %% TODO Set return values into state inside handle_call
 parse_message(Msg, ServerPid) ->
     case lists:member($:, Msg) of
@@ -123,3 +119,6 @@ parse_message(Msg, ServerPid) ->
                 _ ->
                     unknown_error
             end.
+
+%% CAST CHAT CONTROLLER-----------------------------------------------
+controller(Message) -> gen_server:cast(chat_controller, Message).
