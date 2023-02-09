@@ -1,37 +1,59 @@
-# A simple Erlang chat service: 
+# Erlang Chat Service
+### _An Erlang/OTP based TCP Messaging server_
 
 This is a chat server built on top of the Erlang/OTP framework. It allows for multiple
-TCP connections to take place and communication happens via a very simple protocol. 
+TCP connections to take place and communication happens via a very simple text protocol. 
 
 ### Features
+- Supports multiple concurrent users via TCP connection
+- Login and Logout, status check and list active chat rooms
+- Create / Delete chat rooms, aswell as Join and Exit room
+- Direct Messaging to other users
+###### Still in development:
+- Set room Visibility to Public or Private
+- List all active users, list all room partecipants
 
-Login:
------
+### Available commands
+| Command | Parameter (without < >) | Function |
+| - | - | - |
+| LOGIN:| <user_name> | Allows to login with a Username after connection |
+| LOGOUT: | <user_name> | Allows to logout with a Username after connection |
+| WHOAMI: | n/a | Returns a message with the Username of the current logged user |
+| WHEREAMI: | n/a | Returns a message with the Room name the User is currently inside of |
+| | |
+| SAY: | <user_name> : <message> | Send a private message to a single User |
+| | |
+| LISTROOM: | n/a | Returns a message with the list of all active chat Rooms |
+| NEWROOM: | <room_name> | Creates a chat Room with the name passed as Parameter |
+| DELROOM: | <room_name> | Same as above, but if you are the owner of a room, it deletes it |
+| JOINROOM: | <room_name> | Join a room (must be Public), takes the Room name as Parameter |
+| EXITROOM: | <room_name> | Exit the Room the user is currently inside of |
+| | |
+| ROOM: | <room_name> : <message> | Send a message to a specific room that will be broadcasted to all Partecipants |
 
-    LOGIN:"UserName"
+##### _Some examples:_
+From the Client's CLI:
+```
+$ LOGIN:Braeburned
 
-Server protocol:
------
+$ Logged in successfully OwO
+```
+```
+$ WHOAMI:
 
-    LOGOUT:"UserName"
-    LOGIN:
+$ You are currently logged in as: Braeburned.
+```
 
-    WHOAMI:
-    WHEREAMI:
+# How to install
+#### Requirements
+In order to run the application you will need the following software:
+| Required software | Function |
+| - | - |
+| Erlang/OTP 22.3 Installation | The erlang environment to run the software |
+| Rebar3 | Optional. Rebar3 is required in order to generate a release |
+| Git | Pretty sure you already know what this is :3 |
 
-    LISTROOM:
-    NEWROOM:"RoomName"
-    DELROOM:"RoomName"
-    JOINROOM:"RoomName"
-    EXITROOM:"RoomName"
-
-
-### OTP Supervision tree: 
-
-<p align="left">
-  <img src="https://github.com/skaysrei/docs-diagrams/blob/main/OTP%20Supervision%20tree_updated.jpg" />
-</p>
-
+##### Step 1
 Setting up kerl:
 
 Step -1
@@ -56,6 +78,17 @@ Build
 TLSv1.3
 
 # rebar3 version 3.20.0
+##### Step 2
+
+##### Step 3
+
+##### Step 4
+
+## Software structure
+### OTP Supervision tree: 
+<p align="left">
+  <img src="https://github.com/skaysrei/docs-diagrams/blob/main/OTP%20Supervision%20tree_updated.jpg" />
+</p>
 
 ---
 
