@@ -31,6 +31,8 @@ Here you will find the repository of the `client` you can user for testing!
 | DELROOM: | 'room_name' | Same as above, but if you are the owner of a room, it deletes it |
 | JOINROOM: | 'room_name' | Join a room (must be Public), takes the Room name as Parameter |
 | EXITROOM: | 'room_name' | Exit the Room the user is currently inside of |
+| SETPRIVATE: | 'room_name' | Sets the visibility of a room to private |
+| SETPUBLIC: | 'room_name' | Sets the visibility of a room to public |
 | | |
 | ROOM: | 'room_name' : 'message' | Send a message to a specific room that will be broadcasted to all Partecipants |
 | | |
@@ -121,25 +123,21 @@ Wait ~1 minute before restarting the service.
 sending an exit signal. Sending it manually now but needs a rework. Also error
 when connecting multiple clients, service already started.
 (FIXED: Changed start_link/4 to start_link/3, issue was duplicate local name when
-the server tried to start a new translation_layer worker).
+the server tried to start a new translation_layer worker). Maybe remove header?
 
 3. Currently there is a bug when the header that the client receives is sometimes
 doubled. This happens at random and the current workaround is implemented in the
-client via trimming the prefix twice. Needs further investigation.
+client via trimming the prefix twice. Needs further investigation. 
 
-4. TODO: When user disconnects the chat_controller state keeps holding onto its data,
-should be an easy fix
-
-5. TODO: Sending a direct message to non existing user crashes the controller, again,
-easy fix via adding a check
-
-6. TODO: Improve the output of LISTROOM:, its basic af (just like erlang's string 
-manipualtion capabilities)
-
-7. TODO: Implement private room
 
 > Do note: A crash event on the `chat_controller` may cause the server to lose its state.
 > If a crash occours at this time it is recommended to restart the client and `login` again.
+
+## TODO:
+1. Refactor, refactor, refactor again... code redundancy can be improved
+
+2. TODO: When user disconnects the chat_controller state keeps holding onto its data,
+should be an easy fix. Implement cleanup function
 
 <br></br>
 
