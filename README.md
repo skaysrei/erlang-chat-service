@@ -71,6 +71,13 @@ the server tried to start a new translation_layer worker).
 3. Currently there is a bug when the header that the client receives is sometimes
 doubled. This happend at random and the current workaround is implemented in the
 client via trimming the prefix twice. Need further investigation.
+4. TODO: When user disconnects the chat_controller state keeps holding onto its data,
+should be an easy fix
+5. TODO: Sending a direct message to non existing user crashes the controller, again,
+easy fix via adding a check
+6. TODO: Improve the output of LISTROOM:, its basic af (just like erlang string 
+manipualtion capabilities)
+7. TODO: Implement private room
 
 ---
 
