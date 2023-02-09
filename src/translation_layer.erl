@@ -38,8 +38,6 @@ handle_call({message, Msg}, _From, State) ->
         {Command, Content} ->
             select(Parsed, Pid, State),
             {reply, ok, State};
-        protocol_error ->
-            {reply, {error, "Err: Wrong protocol syntax OwO"}, State};
         unknown_error ->
             {reply, {error, "Err: Unknown error CwC"}, State};
         _ ->
@@ -65,21 +63,6 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-%% TODO Set return values into state inside handle_call
-parse_message(Msg, ServerPid) ->
-    case lists:member($:, Msg) of
-        false ->
-            controller({badcomm, Msg, ServerPid});
-        true -> 
-            {Command, [_|Content]} = lists:splitwith(fun(T) -> [T] =/= ":" end, Msg),
-            io:format("\n\nParsed command: C[~p] M[~p]", [Command, Content]),
-            {Command, Content};
-        _ ->
-            unknown_error
-    end.
-
-quit(Command, Msg) ->
-    ok.
 
 %% TODO: change from pid to name, CHANGE TO gen_server:cast()
 %% TODO: Refactor to allow for dynamics args list if possible
@@ -92,18 +75,51 @@ select({"WHOAMI", Data}, ServerPid, State) -> controller({who, ServerPid, State#
 select({"WHEREAMI", Data}, ServerPid, State) -> controller({where, ServerPid, State#state.room}); %% what room i'm in
 %% ROOM MANAGEMENT----------------------------------------------------
 select({"LISTROOM", _}, ServerPid, State) -> controller({listroom, ServerPid});
+select({"LISTUSERS", _}, ServerPid, State) -> controller({listusers, ServerPid});  %% NOT IMPLEMENTED
 select({"NEWROOM", Data}, ServerPid, State) -> controller({newroom, Data, ServerPid, State#state.user});
 select({"DELROOM", Data}, ServerPid, State) -> controller({delroom, Data, ServerPid, State#state.user});
-%% TODO: change user and room state update to be handled by tcp_server
 select({"JOINROOM", Data}, ServerPid, State) -> controller({joinroom, Data, ServerPid, State#state.user});
 select({"EXITROOM", Data}, ServerPid, State) -> controller({exitroom, Data, ServerPid, State#state.user});
-select({"SETPRIVATE", Data}, ServerPid, State) -> controller({setprivate, Data, ServerPid, State#state.user});
-select({"SETPUBLIC", Data}, ServerPid, State) -> controller({setpublic, Data, ServerPid, State#state.user});
+select({"SETPRIVATE", Data}, ServerPid, State) -> controller({setprivate, Data, ServerPid, State#state.user}); %% NOT IMPLEMENTED
+select({"SETPUBLIC", Data}, ServerPid, State) -> controller({setpublic, Data, ServerPid, State#state.user}); %% NOT IMPLEMENTED
 %% SEND MESSAGE-------------------------------------------------------
+%% TODO: Refactor case with pattern matching
+select({"ROOM", Data}, ServerPid, State) ->
+    Parsed = parse_message(Data, ServerPid),
+    case Parsed of
+        {RoomName, Message} ->
+            controller({broadcast, RoomName, Message, ServerPid, State#state.user});
+        _ ->
+            controller({badcomm, Parsed, ServerPid})
+    end;
 select({"SAY", Data}, ServerPid, State) ->
-    ok;
+    Parsed = parse_message(Data, ServerPid),
+    case Parsed of
+        {Recipient, Message} ->
+            controller({direct, Recipient, Message, ServerPid, State#state.user});
+        _ ->
+            controller({badcomm, Parsed, ServerPid})
+    end;
+            
+
 %% CATCH BAD COMMANDS
 select({Command, Data}, ServerPid, State) -> controller({badcomm, Command, ServerPid}).
-%%--------------------------------------------------------------------
-%% SELECTION CONTROLLER
+
+%% SELECTION CONTROLLER-----------------------------------------------
 controller(Message) -> gen_server:cast(chat_controller, Message).
+
+
+%% INTERNAL FUNCTIONS-------------------------------------------------
+
+%% TODO Set return values into state inside handle_call
+parse_message(Msg, ServerPid) ->
+    case lists:member($:, Msg) of
+        false ->
+            controller({badcomm, Msg, ServerPid});
+            true -> 
+                {Command, [_|Content]} = lists:splitwith(fun(T) -> [T] =/= ":" end, Msg),
+                io:format("\n\nParsed command: C[~p] M[~p]", [Command, Content]),
+                {Command, Content};
+                _ ->
+                    unknown_error
+            end.

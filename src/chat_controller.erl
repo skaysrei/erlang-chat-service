@@ -85,6 +85,12 @@ handle_cast({joinroom, RoomName, ServerPid, User}, State) ->
 %% EXIT ROOM
 handle_cast({exitroom, RoomName, ServerPid, User}, State) -> 
     {noreply, NewState = room_action({exit, RoomName, ServerPid, User}, State)};
+%% BROADCAST
+handle_cast({broadcast, RoomName, Message, ServerPid, User}, State) -> 
+    {noreply, NewState = routing_action({broadcast, RoomName, Message, ServerPid, User}, State)};
+%% DIRECT
+handle_cast({direct, Recipient, Message, ServerPid, User}, State) -> 
+    {noreply, NewState = routing_action({direct, Recipient, Message, ServerPid, User}, State)};
 handle_cast(_Msg, State) -> 
     {noreply, State}.
 
@@ -122,7 +128,7 @@ user_action({login, ServerPid, User}, State) ->
             gen_server:cast(ServerPid, {set_user, User}), %% updating state on trs_layer
             gen_server:cast(ServerPid, login),
             NewState = #state{
-                loggedUsers = dict:append(User, ServerPid, State#state.loggedUsers),
+                loggedUsers = dict:store(User, ServerPid, State#state.loggedUsers),
                 activeRooms = State#state.activeRooms
             };
         _ ->
@@ -173,7 +179,7 @@ room_action({list, ServerPid}, State) ->
 room_action({new, RoomName, ServerPid, Owner, Visibility}, State) ->
     case dict:is_key(RoomName, State#state.activeRooms) of
         true ->
-            gen_server:cast(ServerPid, {message, "Room name [" ++ RoomName ++ "]is taken."}),
+            gen_server:cast(ServerPid, {message, "Room name [" ++ RoomName ++ "] is taken."}),
             State;
         false ->
             case Owner == "" of
@@ -230,16 +236,12 @@ room_action({join, RoomName, ServerPid, User}, State) ->
                     gen_server:cast(ServerPid, {set_room, RoomName}),
                     gen_server:cast(ServerPid, {message, "You joined [" ++ RoomName ++ "]!"}),
 
+                    %% atomized update operations
                     Current = dict:fetch(RoomName, State#state.activeRooms),
-                    %% expected: [{"Owner", [], Public}]
                     Partecipants = element(2, Current),
-                    % expected: []
                     NewPart = lists:append(Partecipants, [User]),
-                    % expected: ["User"]
                     ReplaceList = erlang:setelement(2, Current, NewPart),
-                    %% expected {"Owner", ["User"], Public}
                     UpdatedDict = dict:update(RoomName, fun (_) -> ReplaceList end, State#state.activeRooms),
-                    %% expected ["RoomName", {"Owner", ["User"], Public}]
 
                     NewState = #state{
                         activeRooms = UpdatedDict,
@@ -281,15 +283,29 @@ room_action({invite_private, User}, State) ->
     ok.
 
 %% MESSAGE ROUTING FUNCTIONS------------------------------------------------------------
+routing_action({broadcast, RoomName, Message, ServerPid, User}, State) ->
+    lists:foreach(
+        fun (RoomMember) ->
+            send(
+                dict:fetch(RoomMember, State#state.loggedUsers),
+                {Message, User, RoomName}
+            )
+        end, element(2, dict:fetch(RoomName, State#state.activeRooms))),
+        State;
+routing_action({direct, Recipient, Message, ServerPid, User}, State) ->
+    send(
+        dict:fetch(Recipient, State#state.loggedUsers),
+        {Message, User}
+    ), State.
 
 %% send messages to the client
 send(ServerPid, {Message}) ->
     gen_server:cast(ServerPid, {message, Message});
 send(ServerPid, {Message, From}) ->
-    FullMessage = "New message (USER[ " ++ From ++ " ] | PRIVATE: " ++ Message,
+    FullMessage = "direct@" ++ From ++ ": " ++ Message,
     gen_server:cast(ServerPid, {message, FullMessage});
 send(ServerPid, {Message, From, Room}) ->
-    FullMessage = "New message (USER[ " ++ From ++ " ] | ROOM[ " ++ Room ++ " ]: " ++ Message,
+    FullMessage = "room:[" ++ Room ++ "]@" ++ From ++ ": " ++ Message,
     gen_server:cast(ServerPid, {message, FullMessage}).
 
 broadcast(UsrList, Message, From) ->

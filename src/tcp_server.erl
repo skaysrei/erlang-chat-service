@@ -63,6 +63,7 @@ handle_info({tcp, Socket, "!exit"++_}, State) ->
 handle_info({tcp, Socket, Msg}, State) ->
 	%% TODO: change to gen_server:cast
 	gen_server:call(State#state.trs_pid, {message, Msg}),
+	send(State#state.socket, "", []), %% send back only header to release client
 	{noreply, State};
 %% TODO add logout for conn lost or error
 handle_info({tcp_closed, _Socket}, State) -> exit(State#state.trs_pid, kill), {stop, normal, State};
@@ -79,7 +80,7 @@ code_change(_OldVersion, Tab, _Extra) -> {ok, Tab}.
 %% send message back to the client
 send(Socket, Str, Args) ->
 	%% TODO: Overhaul this thing ??
-	ok = gen_tcp:send(Socket, io_lib:format(Str, Args)),
+	ok = gen_tcp:send(Socket, "<h>" ++ io_lib:format(Str, Args)),
 	ok = inet:setopts(Socket, [{active, once}]),
 	ok.
 
