@@ -10,10 +10,21 @@ Login:
 
     LOGIN:"UserName"
 
-Logout:
+Server protocol:
 -----
 
     LOGOUT:"UserName"
+    LOGIN:
+
+    WHOAMI:
+    WHEREAMI:
+
+    LISTROOM:
+    NEWROOM:"RoomName"
+    DELROOM:"RoomName"
+    JOINROOM:"RoomName"
+    EXITROOM:"RoomName"
+
 
 ### OTP Supervision tree: 
 
@@ -50,13 +61,16 @@ TLSv1.3
 
 ### Known issues:
 1. If the service gets terminated, especially while one or more clients are still 
-connected, it might take a few more seconds for the sockets to free up.
-(TEMP FIX: Wait ~1 minute before restarting the service).
+connected, it might take a few more seconds for the sockets to free up. 
+Wait ~1 minute before restarting the service.
 2. translation_layer worker not closing when connection closes because it is not
 sending an exit signal. Sending it manually now but needs a rework. Also error
 when connecting multiple clients, service already started.
 (FIXED: Changed start_link/4 to start_link/3, issue was duplicate local name when
 the server tried to start a new translation_layer worker).
+3. Currently there is a bug when the header that the client receives is sometimes
+doubled. This happend at random and the current workaround is implemented in the
+client via trimming the prefix twice. Need further investigation.
 
 ---
 
