@@ -78,10 +78,18 @@ select({"LISTUSERS", _}, ServerPid, State) -> controller({listusers, ServerPid})
 select({"NEWROOM", Data}, ServerPid, State) -> controller({newroom, Data, ServerPid, State#state.user});
 select({"DELROOM", Data}, ServerPid, State) -> controller({delroom, Data, ServerPid, State#state.user});
 select({"JOINROOM", Data}, ServerPid, State) -> controller({joinroom, Data, ServerPid, State#state.user});
-select({"INVITEROOM", Data}, ServerPid, State) -> controller({joinroom, Data, ServerPid, State#state.user}); %% NOT IMPLEMENTED
 select({"EXITROOM", Data}, ServerPid, State) -> controller({exitroom, Data, ServerPid, State#state.user});
 select({"SETPRIVATE", Data}, ServerPid, State) -> controller({set_private, Data, ServerPid, State#state.user});
 select({"SETPUBLIC", Data}, ServerPid, State) -> controller({set_public, Data, ServerPid, State#state.user});
+
+select({"INVITEROOM", Data}, ServerPid, State) -> 
+    Parsed = parse_message(Data, ServerPid),
+    case Parsed of
+        {RoomName, Target} ->
+            controller({invite_user, RoomName, ServerPid, State#state.user, Target});
+        _ ->
+            controller({badcomm, Data, ServerPid})
+    end;
 
 %% SEND MESSAGE-------------------------------------------------------
 %% TODO: Refactor case with pattern matching
@@ -91,7 +99,7 @@ select({"ROOM", Data}, ServerPid, State) ->
         {RoomName, Message} ->
             controller({broadcast, RoomName, Message, ServerPid, State#state.user});
         _ ->
-            controller({badcomm, Parsed, ServerPid})
+            controller({badcomm, Data, ServerPid})
     end;
 select({"SAY", Data}, ServerPid, State) ->
     Parsed = parse_message(Data, ServerPid),

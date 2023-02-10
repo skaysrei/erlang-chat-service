@@ -91,6 +91,9 @@ handle_cast({set_private, RoomName, ServerPid, User}, State) ->
 %% SET PUBLIC
 handle_cast({set_public, RoomName, ServerPid, User}, State) -> 
     {noreply, NewState = room_action({set_public, RoomName, ServerPid, User}, State)};
+%% INVITE USER
+handle_cast({invite_user, RoomName, ServerPid, User, Target}, State) -> 
+    {noreply, NewState = room_action({invite_user, RoomName, ServerPid, User, Target}, State)};
 %% BROADCAST
 handle_cast({broadcast, RoomName, Message, ServerPid, User}, State) -> 
     {noreply, NewState = routing_action({broadcast, RoomName, Message, ServerPid, User}, State)};
@@ -357,6 +360,37 @@ room_action({set_public, RoomName, ServerPid, User}, State) ->
                     State;
                 _ ->
                     State
+            end
+    end;
+room_action({invite_user, RoomName, ServerPid, User, Target}, State) ->
+    case {dict:is_key(RoomName, State#state.activeRooms),
+        dict:is_key(Target, State#state.loggedUsers)} of
+        Tuple when Tuple =:= {false, true}; Tuple =:= {false, false} ->
+            gen_server:cast(ServerPid, {message, "Room named [" ++ RoomName ++ "] was not found."}),
+            State;
+        {true, false} ->
+            gen_server:cast(ServerPid, {message, "User " ++ Target ++ " does not exist."}),
+            State;
+        {true, true} ->
+            case element(1, dict:fetch(RoomName, State#state.activeRooms)) == User of
+                false ->
+                    gen_server:cast(ServerPid, {message, "Only the owner can add new members."});
+                true ->
+                    TargetPid = dict:fetch(Target, State#state.loggedUsers),
+                    gen_server:cast(TargetPid, {set_room, RoomName}),
+                    gen_server:cast(TargetPid, {message, "You were added to the private room: " ++ RoomName ++ "."}),
+
+                    %% atomized update operations
+                    Current = dict:fetch(RoomName, State#state.activeRooms),
+                    Partecipants = element(2, Current),
+                    NewPart = lists:append(Partecipants, [Target]),
+                    ReplaceList = erlang:setelement(2, Current, NewPart),
+                    UpdatedDict = dict:update(RoomName, fun (_) -> ReplaceList end, State#state.activeRooms),
+
+                    NewState = #state{
+                        activeRooms = UpdatedDict,
+                        loggedUsers = State#state.loggedUsers
+                    }
             end
     end.
 
