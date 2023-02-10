@@ -54,7 +54,7 @@ $ direct@Seasalt: Hey! What's puppin?
 ```
 $ WHOAMI:
 
-$ You are currently logged in as: Brae.
+$ You are currently logged in as: Seasalt.
 ```
 
 > By default the server starts on port `1337`, make sure its available. The client will run on port 1337 aswell 
@@ -100,13 +100,6 @@ running the app in `console` mode will give us an interactive shell to keep an e
 ./_build/default/rel/chat_service/bin/chat_service console
 ```
 > Do note: Remember to make sure your `Erlang` instance is active and the `rebar3` path is set in the shell, the Script will need it to start the app.
-
-Install git:
-sudo apt install git-all
-
-
-kerl config option ssl 1.1 on older otp builds (<24.2)
-export KERL_CONFIGURE_OPTIONS="--without-javac --with-ssl=/usr/local/opt/openssl@1.1"
 
 <br></br>
 
