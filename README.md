@@ -42,9 +42,14 @@ Here you will find the repository of the `client` you can user for testing!
 ##### _Some examples:_
 From the Client's CLI:
 ```
-$ LOGIN:Brae
+$ LOGIN:Seasalt
 
 $ Logged in successfully OwO
+
+
+$ SAY:Seasalt:Hey! What's puppin?
+
+$ direct@Seasalt: Hey! What's puppin?
 ```
 ```
 $ WHOAMI:
