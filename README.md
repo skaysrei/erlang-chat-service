@@ -33,6 +33,7 @@ Here you will find the repository of the `client` you can user for testing!
 | EXITROOM: | 'room_name' | Exit the Room the user is currently inside of |
 | SETPRIVATE: | 'room_name' | Sets the visibility of a room to private |
 | SETPUBLIC: | 'room_name' | Sets the visibility of a room to public |
+| INVITEROOM: | 'room_name' : 'user_name' | Invites another user to a private room |
 | | |
 | ROOM: | 'room_name' : 'message' | Send a message to a specific room that will be broadcasted to all Partecipants |
 | | |
