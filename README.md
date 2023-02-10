@@ -66,6 +66,10 @@ In order to run the application you will need the following software:
 #### Set up your Erlang/OTP instance with Kerl
 Kerl is a build tool which will allow us to set up a specific install version of Erlang/OTP instances. 
 You will need a working Erlang/OTP 22.3 install on your machine, one easy way to get it is by using Kerl. [Learn more here](https://github.com/kerl/kerl)
+> In case your build fails on newer versions of linux, check your `OpenSSL` package version, it comes preloaded on 
+> most distros and it needs to be of version `<= 1.1.1` to successfully build. In the `./scripts` folder you will
+> find a bash script you can use to build and install `OpenSSL 1.1.1b` (which has support for TLSv1.3) and also
+> automagically run the kerl build script!
 
 #### Install rebar3
 rebar3 provides a lot of options for managing Erlang/OTP projects, and in our case specifically, will be used to create a release awe can run. [Learn more here](https://rebar3.org/docs/getting-started/)
@@ -133,11 +137,14 @@ client via trimming the prefix twice. Needs further investigation.
 > Do note: A crash event on the `chat_controller` may cause the server to lose its state.
 > If a crash occours at this time it is recommended to restart the client and `login` again.
 
-## TODO:
-1. Refactor, refactor, refactor again... code redundancy can be improved
+## TODO (Short with time):
+1. Refactor, refactor, refactor again... code redundancy can be improved, common action
+such as state fetch and update could be grouped togheter (within chat_controller), and replace the cast functions
+with custom wrapped ones that are shorte maybe. Especially when updating user state such as room and login position,
+it would make sure the state in the translation_layer gets refreshed every time :3c neat uh?
 
 2. TODO: When user disconnects the chat_controller state keeps holding onto its data,
-should be an easy fix. Implement cleanup function
+should be an easy fix. Implement cleanup function. 
 
 <br></br>
 
